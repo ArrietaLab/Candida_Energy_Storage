@@ -1,0 +1,232 @@
+# Load packages
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(tibble)
+library(purrr)
+library(ggplot2)
+library(scales)
+library(devtools)
+library(ggradar)
+library(scales)
+
+# Load data 
+flow <- read.csv("/Users/mackenziegutierrez/Desktop/HFHS_fungi3_WAT_prop_10Jan2024.csv")
+
+#Format data
+flow_Female_SD <- flow %>%
+  filter(sex == "F") %>%
+  filter(diet == "SD") %>%
+  select(-sex) %>%
+  select(-diet)
+
+flow_Female_HFHS <- flow %>%
+  filter(sex == "F") %>%
+  filter(diet == "HFHS") %>%
+  select(-sex) %>%
+  select(-diet)
+
+flow_Male_SD <- flow %>%
+  filter(sex == "M") %>%
+  filter(diet == "SD") %>%
+  select(-sex) %>%
+  select(-diet)
+
+flow_Male_HFHS <- flow %>%
+  filter(sex == "M") %>%
+  filter(diet == "HFHS") %>%
+  select(-sex) %>%
+  select(-diet)
+
+# Prepare data for plotting
+flow_Female_SD_prop <- flow_Female_SD %>%
+  mutate(across(-c(colonization), ~ .x / 100)) %>%
+  group_by(colonization) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+  unite("group", colonization, sep = "-")
+
+flow_Female_HFHS_prop <- flow_Female_HFHS %>%
+  mutate(across(-c(colonization), ~ .x / 100)) %>%
+  group_by(colonization) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+  unite("group", colonization, sep = "-")
+
+flow_Male_SD_prop <- flow_Male_SD %>%
+  mutate(across(-c(colonization), ~ .x / 100)) %>%
+  group_by(colonization) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+  unite("group", colonization, sep = "-")
+
+flow_Male_HFHS_prop <- flow_Male_HFHS %>%
+  mutate(across(-c(colonization), ~ .x / 100)) %>%
+  group_by(colonization) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+  unite("group", colonization, sep = "-")
+
+# Female SD plot
+jpeg(file = "/Users/mackenziegutierrez/Desktop/radar_female_SD.jpeg", width = 1700, height = 1150, units = "px", res = 300)   
+fig <- ggradar(
+  flow_Female_SD_prop,
+  grid.min = 0,
+  grid.mid = 0.10,
+  grid.max = 0.20,
+  values.radar = c("0", "0.10", "0.20"),
+
+  background.circle.colour = "white",
+  group.point.size = 2,
+  group.line.width = 0.7,
+
+  gridline.min.colour = "grey80",
+  gridline.mid.colour = "grey80",
+  gridline.max.colour = "grey80",
+  axis.line.colour = "grey80",
+
+  grid.label.size = 4,
+  gridline.label.offset = 0,
+  axis.label.size = 4,
+
+  group.colours = alpha(
+    c(
+      "grey50",
+      "#0e3afd"
+    ),
+    0.8
+  )
+) + 
+  ggtitle("Female SD") + 
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), legend.position = "right",
+    legend.direction = "vertical", legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+
+    legend.background = element_rect(
+      colour = "grey70",
+      fill = "white",
+      linewidth = 0.5))
+fig
+dev.off()
+
+# Female HFHS plot
+jpeg(file = "/Users/mackenziegutierrez/Desktop/radar_female_HFHS.jpeg", width = 1700, height = 1150, units = "px", res = 300)   
+fig <- ggradar(
+  flow_Female_HFHS_prop,
+  grid.min = 0,
+  grid.mid = 0.10,
+  grid.max = 0.20,
+  values.radar = c("0", "0.10", "0.20"),
+
+  background.circle.colour = "white",
+  group.point.size = 2,
+  group.line.width = 0.7,
+
+  gridline.min.colour = "grey80",
+  gridline.mid.colour = "grey80",
+  gridline.max.colour = "grey80",
+  axis.line.colour = "grey80",
+
+  grid.label.size = 4,
+  gridline.label.offset = 0,
+  axis.label.size = 4,
+
+  group.colours = alpha(
+    c(
+      "grey50",
+      "#0e3afd"
+    ),
+    0.8
+  )
+) + 
+  ggtitle("Female HFHS") + 
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), legend.position = "right",
+    legend.direction = "vertical", legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+
+    legend.background = element_rect(
+      colour = "grey70",
+      fill = "white",
+      linewidth = 0.5))
+fig
+dev.off()
+
+# Male SD plot
+jpeg(file = "/Users/mackenziegutierrez/Desktop/radar_Male_SD.jpeg", width = 1700, height = 1150, units = "px", res = 300)   
+fig <- ggradar(
+  flow_Male_SD_prop,
+  grid.min = 0,
+  grid.mid = 0.10,
+  grid.max = 0.25,
+  values.radar = c("0", "0.10", "0.25"),
+
+  background.circle.colour = "white",
+  group.point.size = 2,
+  group.line.width = 0.7,
+
+  gridline.min.colour = "grey80",
+  gridline.mid.colour = "grey80",
+  gridline.max.colour = "grey80",
+  axis.line.colour = "grey80",
+
+  grid.label.size = 4,
+  gridline.label.offset = 0,
+  axis.label.size = 4,
+
+  group.colours = alpha(
+    c(
+      "grey50",
+      "#0e3afd"
+    ),
+    0.8
+  )
+) + 
+  ggtitle("Male SD") + 
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), legend.position = "right",
+    legend.direction = "vertical", legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+
+    legend.background = element_rect(
+      colour = "grey70",
+      fill = "white",
+      linewidth = 0.5))
+fig
+dev.off()
+
+# Male SD plot
+jpeg(file = "/Users/mackenziegutierrez/Desktop/radar_Male_HFHS.jpeg", width = 1700, height = 1150, units = "px", res = 300)   
+fig <- ggradar(
+  flow_Male_HFHS_prop,
+  grid.min = 0,
+  grid.mid = 0.10,
+  grid.max = 0.25,
+  values.radar = c("0", "0.10", "0.25"),
+
+  background.circle.colour = "white",
+  group.point.size = 2,
+  group.line.width = 0.7,
+
+  gridline.min.colour = "grey80",
+  gridline.mid.colour = "grey80",
+  gridline.max.colour = "grey80",
+  axis.line.colour = "grey80",
+
+  grid.label.size = 4,
+  gridline.label.offset = 0,
+  axis.label.size = 4,
+
+  group.colours = alpha(
+    c(
+      "grey50",
+      "#0e3afd"
+    ),
+    0.8
+  )
+) + 
+  ggtitle("Male HFHS") + 
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), legend.position = "right",
+    legend.direction = "vertical", legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+
+    legend.background = element_rect(
+      colour = "grey70",
+      fill = "white",
+      linewidth = 0.5))
+fig
+dev.off()
