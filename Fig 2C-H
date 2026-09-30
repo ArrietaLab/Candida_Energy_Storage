@@ -1,0 +1,285 @@
+# Load packages
+library(dplyr)
+library(ggplot2)
+library(vegan)
+
+# Load data 
+df <- read.csv("/Users/mackenziegutierrez/Desktop/bileacids_C_albicansproject.csv")
+
+# Define the individual bile acids to include in the ordination
+ba_vars <- c(
+  "CDCA", "DCA", "UCA", "alpha.MCA", "beta.MCA", "CA",
+  "TUDCA", "THDCA", "TCDCA", "TDCA", "T.beta.MCA", "TCA"
+)
+
+# Build analysis dataframe and remove samples without group assignment
+df_pca <- df %>%
+  select(Tx, all_of(ba_vars)) %>%
+  filter(!is.na(Tx))
+
+# Ensure treatment groups are ordered
+df_pca$Tx <- factor(df_pca$Tx, levels = c("B", "B+C"))
+
+# Log-transform bile acid values
+# Add a small constant to avoid log(0)
+df_pca_log <- df_pca %>%
+  mutate(across(-Tx, ~ log10(.x + 1e-6)))
+
+# Create matrix for PCA and scale variables
+ba_matrix <- df_pca_log %>%
+  select(-Tx) %>%
+  scale(center = TRUE, scale = TRUE)
+
+# Run PCA
+pca_res <- prcomp(ba_matrix, center = TRUE, scale. = TRUE)
+
+# Extract PCA scores
+pca_scores <- as.data.frame(pca_res$x)
+pca_scores$Tx <- df_pca$Tx
+
+# Calculate percent variance explained
+var_explained <- summary(pca_res)$importance[2, ]
+pc1_var <- round(var_explained[1] * 100, 1)
+pc2_var <- round(var_explained[2] * 100, 1)
+
+# Optional: PERMANOVA to test group separation
+adonis_res <- adonis2(ba_matrix ~ Tx, data = df_pca, method = "euclidean")
+print(adonis_res)
+
+# Create PCA plot
+jpeg(file = "/Users/mackenziegutierrez/Desktop/PCA_BA.jpeg", width = 1100, height = 1300, units = "px", res = 300) 
+p_pca <- ggplot(pca_scores, aes(x = PC1, y = PC2, color = Tx)) +
+  geom_point(size = 1.5, alpha = 0.9) +
+  stat_ellipse(
+    level = 0.95,
+    geom = "polygon",
+    alpha = 1/6,
+    linetype = 2,
+    linewidth = 0.5,
+    aes(fill = Tx, color = Tx)
+  ) +
+  scale_color_manual(
+    name = "Colonization",
+    values = c("B" = "#797979", "B+C" = "#0e3afd")
+  ) +
+  scale_fill_manual(
+    name = "Colonization",
+    values = c("B" = "#797979", "B+C" = "#0e3afd")
+  ) +
+  labs(
+    x = paste0("PC1 (", pc1_var, "%)"),
+    y = paste0("PC2 (", pc2_var, "%)")
+  ) +
+  theme_bw() +
+  theme(
+    legend.title = element_text(colour = "black", size = 9.5, face = "bold"),
+    legend.text = element_text(colour = "black", size = 9.5),
+    legend.position = "bottom",
+    axis.title = element_text(face = "bold", size = 10.5, color = "black"),
+    axis.text = element_text(size = 9.5),
+    strip.text.x = element_text(face = "bold"),
+    plot.title = element_text(colour = "black", size = 12, face = "bold", hjust = 0.5)
+  )
+p_pca
+dev.off()
+
+# Save plot as a square figure
+ggsave(
+  filename = "PCA_bile_acids_square.png",
+  plot = p_pca,
+  width = 5,
+  height = 5,
+  dpi = 300
+)
+
+# Optional: inspect loadings to see which bile acids drive separation
+loadings <- as.data.frame(pca_res$rotation)
+loadings$Bile_acid <- rownames(loadings)
+loadings <- loadings %>%
+  arrange(desc(abs(PC1)))
+
+print(loadings)
+write.csv(loadings, "PCA_bile_acids_loadings.csv", row.names = FALSE)
+
+## Single and grouped bile acid analysis
+# Load packages
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cowplot)
+
+# Helper function for significance stars
+get_stars <- function(p) {
+  dplyr::case_when(
+    p < 0.001 ~ "***",
+    p < 0.01  ~ "**",
+    p < 0.05  ~ "*",
+    TRUE      ~ "ns"
+  )
+}
+
+# Make sure treatment group is ordered
+df$Tx <- factor(df$Tx, levels = c("B", "B+C"))
+
+df_grouped <- df %>%
+  mutate(
+    Secondary_Unconjugated = DCA + UCA,
+    Secondary_Conjugated   = TDCA + TUDCA + THDCA,
+    Total_Secondary        = Secondary_Unconjugated + Secondary_Conjugated
+  )
+
+df_grouped$Tx <- factor(df_grouped$Tx, levels = c("B", "B+C"))
+
+# Individual bile acid data
+sig_individual <- df %>%
+  select(Tx, DCA, `alpha.MCA`) %>%
+  filter(!is.na(Tx))
+
+sig_individual$Tx <- droplevels(sig_individual$Tx)
+
+sig_individual_long <- sig_individual %>%
+  pivot_longer(
+    cols = c(`alpha.MCA`, DCA),
+    names_to = "Metric",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Metric = factor(Metric, levels = c("alpha.MCA", "DCA"))
+  )%>%
+  mutate(
+    Metric = recode(Metric, "alpha.MCA" = "alpha-MCA"),
+    Metric = factor(Metric, levels = c("alpha-MCA", "DCA"))
+  )
+
+# Adjusted p-values for individual bile acids
+fdr_individual <- data.frame(
+  Metric = factor(c("alpha-MCA", "DCA"), levels = c("alpha-MCA", "DCA")),
+  FDR = c(0.0372, 0.0043)
+) %>%
+  mutate(stars = get_stars(FDR))
+
+# y positions for stars
+ypos_individual <- sig_individual_long %>%
+  group_by(Metric) %>%
+  summarise(y = max(Value, na.rm = TRUE) * 1.10, .groups = "drop")
+
+ann_individual <- fdr_individual %>%
+  left_join(ypos_individual, by = "Metric") %>%
+  mutate(x = 1.5)
+
+# Grouped bile acid data
+sig_grouped <- df_grouped %>%
+  select(Tx, Secondary_Unconjugated, Secondary_Conjugated, Total_Secondary) %>%
+  filter(!is.na(Tx))
+
+sig_grouped$Tx <- droplevels(sig_grouped$Tx)
+
+sig_grouped_long <- sig_grouped %>%
+  pivot_longer(
+    cols = c(Secondary_Unconjugated, Secondary_Conjugated, Total_Secondary),
+    names_to = "Metric",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Metric = factor(
+      Metric,
+      levels = c("Secondary_Unconjugated", "Secondary_Conjugated", "Total_Secondary"),
+      labels = c("Secondary unconjugated", "Secondary conjugated", "Total secondary")
+    )
+  )
+
+# Adjusted p-values for grouped metrics
+fdr_grouped <- data.frame(
+  Metric = factor(
+    c("Secondary unconjugated", "Secondary conjugated", "Total secondary"),
+    levels = c("Secondary unconjugated", "Secondary conjugated", "Total secondary")
+  ),
+  FDR = c(0.0152, 0.0152, 0.0152)
+) %>%
+  mutate(stars = get_stars(FDR))
+
+# y positions for stars
+ypos_grouped <- sig_grouped_long %>%
+  group_by(Metric) %>%
+  summarise(y = max(Value, na.rm = TRUE) * 1.10, .groups = "drop")
+
+ann_grouped <- fdr_grouped %>%
+  left_join(ypos_grouped, by = "Metric") %>%
+  mutate(x = 1.5)
+
+# Plot top row
+p_top <- ggplot(sig_individual_long, aes(x = Tx, y = Value, fill = Tx)) +
+  geom_boxplot(width = 0.6, outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(aes(color = Tx), width = 0.12, size = 1.5, alpha = 0.9) +
+  geom_text(
+    data = ann_individual,
+    aes(x = x, y = y, label = stars),
+    inherit.aes = FALSE,
+    size = 7,
+    fontface = "bold"
+  ) +
+  facet_wrap(~ Metric, scales = "free_y", nrow = 1) +
+  scale_fill_manual(
+    name = "Colonization",
+    values = c("B" = "#aeaeae", "B+C" = "#8ea4ff")
+  ) +
+  scale_color_manual(
+    name = "Colonization",
+    values = c("B" = "#686868", "B+C" = "#0f3bff")
+  ) +
+  labs(x = NULL, y = "Bile acid abundance") +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    axis.title = element_text(face = "bold", size = 10.5, color = "black"),
+    axis.text = element_text(size = 9.5, color = "black"),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 10.5, color = "black"),
+    plot.title = element_text(colour = "black", size = 12, face = "bold", hjust = 0.5)
+  )
+p_top
+
+# Plot bottom row
+p_bottom <- ggplot(sig_grouped_long, aes(x = Tx, y = Value, fill = Tx)) +
+  geom_boxplot(width = 0.6, outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(aes(color = Tx), width = 0.12, size = 1.5, alpha = 0.9) +
+  geom_text(
+    data = ann_grouped,
+    aes(x = x, y = y, label = stars),
+    inherit.aes = FALSE,
+    size = 7,
+    fontface = "bold"
+  ) +
+  facet_wrap(~ Metric, scales = "free_y", nrow = 1) +
+  scale_fill_manual(
+    name = "Colonization",
+    values = c("B" = "#aeaeae", "B+C" = "#8ea4ff")
+  ) +
+  scale_color_manual(
+    name = "Colonization",
+    values = c("B" = "#686868", "B+C" = "#0f3bff")
+  ) +
+  labs(x = NULL, y = "Grouped bile acid abundance") +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    axis.title = element_text(face = "bold", size = 10.5, color = "black"),
+    axis.text = element_text(size = 9.5, color = "black"),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 10.5, color = "black"),
+    plot.title = element_text(colour = "black", size = 12, face = "bold", hjust = 0.5)
+  )
+p_bottom
+
+# Combine plots
+jpeg(file = "/Users/mackenziegutierrez/Desktop/PhD/HFHS_fungi3/BA_grid.jpeg", width = 1900, height = 1700, units = "px", res = 300) 
+final_plot <- cowplot::plot_grid(
+  p_top,
+  p_bottom,
+  ncol = 1,
+  align = "v",
+  rel_heights = c(1, 1)
+)
+final_plot
+dev.off()
+)
